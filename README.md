@@ -21,6 +21,3 @@ g++ -o bobby.exe main.cpp -I"SDL2/include" -L"SDL2/lib" -lmingw32 -lSDL2main -lS
 
 ### LINUX
 g++ -o bobby main.cpp `pkg-config --cflags --libs sdl2 SDL2_image SDL2_mixer`
-
-
-<img width="647" height="675" alt="image" src="https://github.com/user-attachments/assets/73b118df-3c67-409a-b11b-e16ceca1a660" />
