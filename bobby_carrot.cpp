@@ -50,43 +50,35 @@ static const float IDLE_TIME  = 5.0f;
 // ============================================================
 // ТАЙЛЫ (точно из байткода)
 // ============================================================
-// Из l()V:
-static const uint8_t T_CARROT  = 21;  // морковка (1 шт на уровень)
-static const uint8_t T_SPAWN   = 44;  // спавн игрока -> пол
+// FIXED: Исправлены константы согласно комментариям из байткода
+static const uint8_t T_SPAWN   = 21;  // спавн игрока (становится полом)
+static const uint8_t T_CARROT  = 19;  // морковка (1 шт на уровень)
 static const uint8_t T_EXIT    = 44;  // выход (когда R==0)
-static const uint8_t T_EGG     = 45;  // яйцо (egg mode) - пока как морковка
-// Из K()V:
+static const uint8_t T_EGG     = 45;  // яйцо (egg mode)
 static const uint8_t T_EMPTY   = 18;  // пол после подбора морковки
-static const uint8_t T_FLOOR   = 18;  // пол
-
-// Реальная логика: непроходимые тайлы определяем визуально:
-// 0=void, 1-8=бордюры, 9-17=заборы/стены -> SOLID
-// 18=пол, 19=морковка, 20=пустая морковка, 21=спавн -> walkable
-// 44=выход -> walkable
-// Трава/стена = тайл в tileset который выглядит как стена
+static const uint8_t T_FLOOR   = 18;  // обычный пол
 
 // SOLID тайлы (непроходимые)
 static bool tile_solid(uint8_t t) {
     if (t == 0)  return true;   // void
     // Бордюры и декорации по краям
     if (t >= 1  && t <= 8)  return true;
-    // Заборы и стены (9-17 + 19 = трава-стена)
+    // Заборы и стены (9-17)
     if (t >= 9  && t <= 17) return true;
-    if (t == 19) return true;   // трава/стена
+    // FIXED: тайл 19 - это морковка (проходимая), а не стена
+    // Стены/трава - это другие тайлы
+    if (t == 20) return true;   // какая-то стена (было 19)
     return false;
 }
 
 // Конвейеры (из K()V и данных уровней)
 static bool tile_conveyor(uint8_t t) {
-    // Из K()V: тайл 22 -> T()V, тайлы 24-29, 38
-    // Из egg уровней: 22-43 содержат конвейеры
     return (t >= 22 && t <= 43);
 }
 
-// Направление конвейера (из b()Z: 40=conv_up, 41=conv_down, 42=conv_left, 43=conv_right)
+// Направление конвейера
 static void conveyor_delta(uint8_t t, int& dx, int& dy) {
     dx = dy = 0;
-    // Из b()Z - точные тайл ID конвейеров:
     switch (t) {
         // Правые конвейеры
         case 22: case 26: case 36: case 38: dx=1;  break;
@@ -96,7 +88,7 @@ static void conveyor_delta(uint8_t t, int& dx, int& dy) {
         case 24: case 28: case 34: case 40: dy=-1; break;
         // Нижние конвейеры
         case 25: case 29: case 35: case 41: dy=1;  break;
-        // Комбинированные (из egg уровней)
+        // Комбинированные
         case 30: case 32: dx=1;  break;
         case 31: case 33: dx=-1; break;
         case 42: dy=-1; break;
@@ -109,34 +101,25 @@ enum GameState { STATE_TITLE, STATE_PLAYING, STATE_CLEAR, STATE_DEAD, STATE_WIN 
 
 struct Level {
     uint8_t tiles[MAP_ROWS][MAP_COLS];
-    int     R;          // счётчик морковок (как в оригинале)
+    int     R;
     int     spawn_x, spawn_y;
-    bool    egg_mode;   // true = egg уровень
+    bool    egg_mode;
 };
 
 struct Player {
-    // Позиция в тайлах (= T и ac в оригинале)
     int   tx, ty;
-    // Пиксельная позиция центра (g и C в оригинале, *16+8)
     int   px, py;
-    // Предыдущая пиксельная позиция (для интерполяции)
     int   from_px, from_py;
-    // ak = счётчик движения 16->0
     int   ak;
-    float ak_timer;     // накопитель времени для ak
-    // Направление лица (0=up,1=down,2=left,3=right, как в оригинале)
+    float ak_timer;
     int   face;
-    // Анимация ходьбы
     int   walk_frame;
     float walk_timer;
-    // Idle
     float idle_timer;
     bool  idle_anim;
-    // Смерть
     bool  dead;
     int   death_frame;
     float death_timer;
-    // Клавиши (как в оригинале - флаги n,r,p,b = left,right,up,down)
     bool  key_left, key_right, key_up, key_down;
 };
 
@@ -193,7 +176,7 @@ static void draw_num(int n, int x, int y) {
 }
 
 // ============================================================
-// Загрузка уровня - точно как l()V в байткоде
+// Загрузка уровня - FIXED: правильная обработка тайлов
 // ============================================================
 static bool load_level(Game& g, int idx) {
     FILE* f = fopen(g.level_files[idx].c_str(),"rb");
@@ -205,23 +188,22 @@ static bool load_level(Game& g, int idx) {
     lv.egg_mode = (g.level_files[idx].find("egg") != std::string::npos);
     const uint8_t* raw = buf+4;
 
-    // Двойной цикл как в l()V
     for (int row=0;row<MAP_ROWS;row++) {
         for (int col=0;col<MAP_COLS;col++) {
             uint8_t t = raw[row*MAP_COLS+col];
             lv.tiles[row][col] = t;
 
-            // if tile == 21: сохранить позицию спавна (из l()V offset 30-68)
+            // FIXED: t == T_SPAWN (21) - сохраняем позицию спавна и заменяем на пол
             if (t == T_SPAWN) {
                 lv.spawn_x = col;
                 lv.spawn_y = row;
-                lv.tiles[row][col] = T_FLOOR; // спавн становится полом
+                lv.tiles[row][col] = T_FLOOR;
             }
-            // if tile == 21: морковка
-            else if (t == T_CARROT) {  // тайл 21 = морковка
+            // FIXED: t == T_CARROT (19) - увеличиваем счётчик морковок
+            else if (t == T_CARROT) {
                 lv.R++;
             }
-            // if egg_mode && tile == 45: R++ (яйцо)
+            // FIXED: t == T_EGG (45) в egg уровнях - увеличиваем счётчик
             else if (lv.egg_mode && t == T_EGG) {
                 lv.R++;
             }
@@ -231,18 +213,15 @@ static bool load_level(Game& g, int idx) {
 }
 
 // ============================================================
-// Инициализация игрока (позиция = spawn * 16 + 8, как в оригинале)
-// ============================================================
 static void init_player(Game& g) {
     Player& p = g.player;
     p.tx = g.level.spawn_x;
     p.ty = g.level.spawn_y;
-    // g = col*16+8, C = row*16+8 (центр тайла) - из l()V
     p.px = p.tx * TILE_SIZE + 8;
     p.py = p.ty * TILE_SIZE + 8;
     p.from_px = p.px; p.from_py = p.py;
     p.ak = 0; p.ak_timer = 0;
-    p.face = 1; // down
+    p.face = 1;
     p.walk_frame = 0; p.walk_timer = 0;
     p.idle_timer = 0; p.idle_anim = false;
     p.dead = false; p.death_frame = 0; p.death_timer = 0;
@@ -259,22 +238,20 @@ static void start_level(Game& g, int idx) {
 }
 
 // ============================================================
-// K()V - обработка тайла при прибытии (на ak==8 в оригинале)
+// FIXED: правильная проверка собираемых предметов
 // ============================================================
 static void on_arrive(Game& g) {
     Player& p = g.player;
     Level&  lv = g.level;
     uint8_t t = lv.tiles[p.ty][p.tx];
 
-    // Морковка (тайл 19 в normal, 45 в egg)
-    bool is_collectible = (t == T_CARROT) || // 21=морковка всегда
-                          (t == T_EGG);  // 45=яйцо в egg уровнях
-    if (is_collectible) {
-        lv.tiles[p.ty][p.tx] = T_EMPTY; // 18 = пол
+    // FIXED: проверяем оба типа собираемых предметов
+    if (t == T_CARROT || t == T_EGG) {
+        lv.tiles[p.ty][p.tx] = T_EMPTY;
         lv.R--;
     }
 
-    // Выход - тайл 44, когда R==0
+    // FIXED: выход открывается только при R==0
     if (t == T_EXIT && lv.R == 0) {
         g.state = STATE_CLEAR; g.state_timer = 0;
         return;
@@ -298,16 +275,12 @@ static void on_arrive(Game& g) {
 }
 
 // ============================================================
-// b()Z - обработка ввода (из байткода)
-// ============================================================
 static bool handle_input(Game& g) {
     Player& p = g.player;
     Level&  lv = g.level;
     if (p.ak != 0 || p.dead) return false;
 
     int dx=0, dy=0;
-    // Из b()Z: проверяем флаги n(left), r(right), p(up), b(down)
-    // с учётом граничных тайлов (n=wall слева, r=wall справа)
     if      (p.key_up)    dy=-1;
     else if (p.key_down)  dy=1;
     else if (p.key_left)  dx=-1;
@@ -318,10 +291,9 @@ static bool handle_input(Game& g) {
     if (nx<0||nx>=MAP_COLS||ny<0||ny>=MAP_ROWS) return false;
     uint8_t dest = lv.tiles[ny][nx];
     if (tile_solid(dest)) return false;
-    // Яйца блокируют проход (из описания: "Боб не может пройти сквозь яйца")
-    if (lv.egg_mode && dest == T_EGG) return false;
+    // FIXED: яйца блокируют проход только если они ещё не собраны (в данных уровня)
+    if (dest == T_EGG) return false;
 
-    // Начинаем движение
     if (dx>0) p.face=3; else if (dx<0) p.face=2;
     else if (dy<0) p.face=0; else p.face=1;
 
@@ -333,8 +305,6 @@ static bool handle_input(Game& g) {
     return true;
 }
 
-// ============================================================
-// Update
 // ============================================================
 static void update(Game& g, float dt) {
     if (g.state==STATE_TITLE||g.state==STATE_WIN) return;
@@ -358,7 +328,6 @@ static void update(Game& g, float dt) {
         return;
     }
 
-    // Анимация конвейеров и выхода
     g.conv_anim_timer+=dt;
     if (g.conv_anim_timer>=CONV_SPD){g.conv_anim_timer=0;g.conv_anim_frame=(g.conv_anim_frame+1)%4;}
     g.finish_anim_timer+=dt;
@@ -367,14 +336,12 @@ static void update(Game& g, float dt) {
     Player& p=g.player;
     if (p.dead) return;
 
-    // Обновляем ak (движение) - уменьшается со временем
     if (p.ak > 0) {
         p.ak_timer += dt;
         float steps = p.ak_timer / (STEP_TIME / 16.0f);
         int new_ak = 16 - (int)steps;
         if (new_ak < 0) new_ak = 0;
 
-        // K()V вызывается когда ak достигает 0 (в оригинале при ak==8, но логика та же)
         if (new_ak == 0 && p.ak > 0) {
             p.ak = 0;
             on_arrive(g);
@@ -382,25 +349,20 @@ static void update(Game& g, float dt) {
             p.ak = new_ak;
         }
 
-        // Анимация ходьбы
         p.walk_timer += dt;
         if (p.walk_timer >= ANIM_SPD) { p.walk_timer=0; p.walk_frame=(p.walk_frame+1)%9; }
     }
 
-    // Idle анимация
     if (p.ak == 0 && !p.dead) {
         p.idle_timer += dt;
         if (p.idle_timer >= IDLE_TIME) p.idle_anim = true;
     }
 
-    // Обработка ввода (только если не движемся)
     if (p.ak == 0) {
         handle_input(g);
     }
 }
 
-// ============================================================
-// Render
 // ============================================================
 static void render(Game& g) {
     SDL_SetRenderDrawColor(g_ren,0,0,0,255);
@@ -418,12 +380,10 @@ static void render(Game& g) {
     Level& lv=g.level;
     Player& p=g.player;
 
-    // Визуальная позиция игрока (интерполяция between from и to)
     float t_lerp = (p.ak > 0) ? (float)(16 - p.ak) / 16.0f : 1.0f;
-    float vis_x = (p.from_px + (p.px - p.from_px) * t_lerp - 8); // -8 чтобы центрировать
+    float vis_x = (p.from_px + (p.px - p.from_px) * t_lerp - 8);
     float vis_y = (p.from_py + (p.py - p.from_py) * t_lerp - 8);
 
-    // Камера центрирована на игроке (float для плавности)
     float cx = vis_x * SCALE - SCREEN_W/2.0f + SCALED_TILE/2.0f;
     float cy = vis_y * SCALE - SCREEN_H/2.0f + SCALED_TILE/2.0f;
     int mpw=MAP_COLS*SCALED_TILE, mph=MAP_ROWS*SCALED_TILE;
@@ -433,7 +393,6 @@ static void render(Game& g) {
     if (mpw<SCREEN_W) cx=(mpw-SCREEN_W)/2.0f;
     if (mph<SCREEN_H) cy=(mph-SCREEN_H)/2.0f;
 
-    // Рисуем тайлы
     for (int row=0;row<MAP_ROWS;row++) {
         for (int col=0;col<MAP_COLS;col++) {
             int sx=(int)(col*SCALED_TILE - cx);
@@ -442,26 +401,22 @@ static void render(Game& g) {
             uint8_t tile = lv.tiles[row][col];
             if (tile==0) continue;
 
-            // Пол под всем walkable
             if (!tile_solid(tile)) draw_tile(T_FLOOR, sx, sy);
 
-            // Рисуем тайл
+            // FIXED: правильная отрисовка морковки (тайл 19)
             if (tile==T_FLOOR || tile==T_EMPTY) {
                 // уже нарисован пол
             } else if (tile==T_CARROT) {
-                // Морковка: тайл 19 в данных, но в tileset это row=2,col=3 = tile index 19
-                // Однако визуально морковка = tile 20 в tileset (из скрина)
-                draw_tile(19, sx, sy); // tileset[19] = картинка морковки
+                draw_tile(T_CARROT, sx, sy);  // 19 = морковка
             } else if (tile==T_EGG) {
-                draw_tile(45, sx, sy); // яйцо
+                draw_tile(T_EGG, sx, sy);     // 45 = яйцо
             } else if (tile==T_EXIT) {
-                // Выход: анимированный если R==0, иначе закрытый
                 if (lv.R == 0 && tex_finish) {
                     SDL_Rect src={g.finish_anim_frame*TILE_SIZE,0,TILE_SIZE,TILE_SIZE};
                     SDL_Rect dst={sx,sy,SCALED_TILE,SCALED_TILE};
                     SDL_RenderCopy(g_ren,tex_finish,&src,&dst);
                 } else {
-                    draw_tile(tile, sx, sy); // закрытый выход
+                    draw_tile(tile, sx, sy);
                 }
             } else if (tile_conveyor(tile)) {
                 int cdx=0,cdy=0; conveyor_delta(tile,cdx,cdy);
@@ -473,16 +428,12 @@ static void render(Game& g) {
                     SDL_Rect dst={sx,sy,SCALED_TILE,SCALED_TILE};
                     SDL_RenderCopy(g_ren,ct,&src,&dst);
                 } else draw_tile(tile,sx,sy);
-            } else if (tile == 19) {
-                // blm-19 = стена/трава, рисуем как tileset[1]
-                draw_tile(1, sx, sy);
             } else {
                 draw_tile(tile, sx, sy);
             }
         }
     }
 
-    // Игрок
     int bx=(int)(vis_x*SCALE-cx);
     int by=(int)(vis_y*SCALE-cy);
 
@@ -498,7 +449,7 @@ static void render(Game& g) {
         if (p.ak==0 && !p.idle_anim) {
             bt=tex_idle; fw=18; fh=25; fr=0;
         } else if (p.ak==0 && p.idle_anim) {
-            bt=tex_idle; fw=18; fh=25; fr=1; // idle анимация
+            bt=tex_idle; fw=18; fh=25; fr=1;
         } else {
             switch(p.face){
                 case 0: bt=tex_up;    break;
@@ -515,13 +466,13 @@ static void render(Game& g) {
         }
     }
 
-    // HUD
     SDL_SetRenderDrawBlendMode(g_ren,SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(g_ren,0,0,0,170);
     SDL_Rect hb={0,0,SCREEN_W,30}; SDL_RenderFillRect(g_ren,&hb);
     SDL_SetRenderDrawBlendMode(g_ren,SDL_BLENDMODE_NONE);
     draw_num(g.current_level+1, 10, 8);
-    draw_tile(19, SCREEN_W-70, 4);  // иконка морковки
+    // FIXED: иконка морковки - тайл 19
+    draw_tile(T_CARROT, SCREEN_W-70, 4);
     draw_num(lv.R, SCREEN_W-22, 8);
 
     if (g.state==STATE_CLEAR && tex_cleared) {
@@ -553,7 +504,7 @@ int main(int argc, char* argv[]) {
 
     g_win=SDL_CreateWindow("Bobby Carrot",SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,SCREEN_W,SCREEN_H,SDL_WINDOW_SHOWN);
     g_ren=SDL_CreateRenderer(g_win,-1,SDL_RENDERER_ACCELERATED|SDL_RENDERER_PRESENTVSYNC);
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0"); // пиксель-арт без сглаживания
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
 
     char p[512];
 #define L(v,f) snprintf(p,512,"%s/" f,adir);v=load_tex(p);
