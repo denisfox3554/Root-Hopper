@@ -14,6 +14,7 @@ Uses **SDL2** for graphics and **SDL2_mixer** for music.
 - ✅ Pixel art rendering without antialiasing
 - ✅ Controls: Arrows/WASD, R - restart, N - next level
 
+![image alt](https://github.com/denisfox3554/Root-Hopper/blob/a62eae994e4dd8d0d297585385b17cb4e8a28222/image.png)
 ## 🛠 Assembly
 
 ### Windows (MinGW)
