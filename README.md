@@ -1,19 +1,20 @@
 # Bobby Carrot - Native PC Port (C++/SDL2)
 
-🎮 **Порт классической J2ME игры Bobby Carrot на Windows/Linux/Mac**
+🎮 **Port of the classic J2ME game Bobby Carrot to Windows/Linux/Mac**
 
-Восстановлено из оригинального байткода.  
-Использует **SDL2** для графики и **SDL2_mixer** для музыки.
+Rebuilt from the original bytecode.
 
-## ✨ Особенности
+Uses **SDL2** for graphics and **SDL2_mixer** for music.
 
-- ✅ Полная механика из оригинала (ak-счётчик, конвейеры, яйца)
-- ✅ Поддержка 50 уровней (normal01-30, egg01-20)
-- ✅ MIDI музыка
-- ✅ Пиксель-арт рендеринг без сглаживания
-- ✅ Управление: стрелки/WASD, R - рестарт, N - след. уровень
+## ✨ Features
 
-## 🛠 Сборка
+- ✅ Complete mechanics from the original (AK counter, conveyors, eggs)
+- ✅ Support for 50 levels (normal01-30, egg01-20)
+- ✅ MIDI music
+- ✅ Pixel art rendering without antialiasing
+- ✅ Controls: Arrows/WASD, R - restart, N - next level
+
+## 🛠 Assembly
 
 ### Windows (MinGW)
 ```bash
